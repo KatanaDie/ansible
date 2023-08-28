@@ -1,0 +1,56 @@
+#Установка ansible, создание необходимых файлов и папок
+apt-get install ansible
+mkdir /etc/ansible/
+mkdir /etc/ansible/playbooks
+touch /etc/ansible/hosts
+touch /etc/ansible/playbooks/hostlist.yml
+touch /etc/ansible/playbooks/backup.yml
+touch /etc/ansible/spisok #Создание файла в котором будут хосты и пароли вида host1 password1, это тут временно, позже сделаю путь к файлу атрибутом
+
+#Заполнение инвентарного файла, прописываются необходимые модули и логин от микротиков
+cat <<EOF > /etc/ansible/hosts
+[mikrotik]
+
+[mikrotik:vars]
+ansible_user= user
+ansible_connection=ansible.netcommon.network_cli
+ansible_network_os=community.routeros.routeros
+EOF
+
+#Запись в playbook кода создания бэкапа на микротике
+cat <<EOF  > /etc/ansible/playbooks/backup.yml
+- hosts: mikrotik
+  gather_facts: false
+  tasks:
+  - name: collect facts
+    community.routeros.facts:
+     gather_subset: all
+  - name: create backup
+    routeros_command:
+     commands: /system backup save name= "{{ansible_net_hostname}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}"
+EOF
+
+#Запись в playbook кода для подгрузки логинов и паролей в инвентарный файл из нашего текстового файла с хостами и паролями
+cat <<EOF > /etc/ansible/playbooks/hostlist.yml
+- name: host:pass
+  hosts: localhost
+  tasks:
+    - name: read
+      command: cat /etc/ansible/spisok #Здесь указан путь до нашего текстового файла с хостами и паролями, позже сделаю атрибутом
+      register: hosts_and_passwords
+    - name: write
+      ini_file:
+        path: /etc/ansible/hosts
+        section: mikrotik
+        option: "{{ item.split()[0] }}"
+        value: "ansible_password={{ item.split()[1] }} ansible_port={{ item.split()[2] }}"
+      loop: "{{ hosts_and_passwords.stdout_lines }}"
+EOF
+
+#Создание файла со списком хостов и паролей
+cat <<EOF > /etc/ansible/spisok 
+host1.primer.com password1 22
+EOF
+
+ansible-playbook /etc/ansible/playbooks/hostlist.yml #Запуск playbook заполняющего hosts из нашего текстового файла со списком хостов и паролей
+ansible-playbook /etc/ansible/playbooks/backup.yml #Запуск playbook который создаёт бэкап на тике
