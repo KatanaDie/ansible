@@ -1,5 +1,11 @@
-#Это bash скрипт, создаём в любой директории на которую есть права файл коммандой touch %scriptname%.sh и вписываем вот это, всё работает без рут прав
+# Что необходимо установить для работы:
+# Не забываем предварительно сделать update пакетов, в ubuntu это команда sudo apt-get update
+# Устанавливаем ansible, в ubuntu это команда sudo apt-get install ansible
+# Устанавливаем python3-pip, в ubuntu это команда sudo apt-get install python3-pip, после установки которого вводим команду pip install paramiko
 
+
+
+#Это bash скрипт, создаём в любой директории на которую есть права файл коммандой touch %scriptname%.sh и вписываем все строки ниже, всё работает без рут прав
 #Путь до списка с хостами и паролями сделан атрибутом! Указываем его в конце строки с командой запуска скрипта
 
 #Создание необходимых файлов и папок
@@ -8,17 +14,24 @@ mkdir /home/$USER/ansible
 mkdir /home/$USER/ansible/playbooks
 mkdir /home/$USER/mikrotik_backup
 
+#Создание кастомного конфигурационного файла
+cat <<EOF > /home/$USER/ansible/ansible.cfg
+[defaults]
+inventory=/home/$USER/ansible/hosts
+host_key_checking=false # Отключение первичной проверки ключей при ssh подключении. Иначе придётся сначала заходить своими руками
+EOF
+
 #Заполнение инвентарного файла, прописываются необходимые модули и логин от микротиков
 cat <<EOF > /home/$USER/ansible/hosts
 [mikrotik]
 
 [mikrotik:vars]
-ansible_ssh_common_args='-o StrictHostKeyChecking=no'
-ansible_user= user
+ansible_python_interpreter=/usr/bin/python3
+ansible_user=user
 ansible_network_os=community.routeros.routeros
 EOF
 
-#Запись в playbook кода создания и скачивания бэкапа на микротике, бэкап будет создан с названием "%имя хоста% %версия роутерос% %дата создания в виде год-месяц-день% SN %серийный номер устройства%.backup
+#Запись в playbook кода создания и скачивания бэкапа на микротике
 cat <<EOF  > /home/$USER/ansible/playbooks/backup.yml
 - hosts: mikrotik
   connection: network_cli
@@ -37,7 +50,7 @@ cat <<EOF  > /home/$USER/ansible/playbooks/backup.yml
         protocol: sftp
 EOF
 
-#Запись в playbook кода для подгрузки логинов и паролей в инвентарный файл из нашего текстового файла с хостами и паролями
+#Запись в playbook кода для подгрузки логинов и паролей в инвентарный файл из нашего текстового файла с хостами, паролями и ssh портами через пробел
 cat <<EOF > /home/$USER/ansible/playbooks/hostlist.yml
 - name: host:pass
   hosts: localhost
@@ -54,5 +67,5 @@ cat <<EOF > /home/$USER/ansible/playbooks/hostlist.yml
       loop: "{{ hosts_and_passwords.stdout_lines }}"
 EOF
 
-ansible-playbook /home/$USER/ansible/playbooks/hostlist.yml -i /home/$USER/ansible/hosts  #Запуск playbook заполняющего hosts из нашего текстового файла со списком хостов и паролей
-ansible-playbook /home/$USER/ansible/playbooks/backup.yml -i /home/$USER/ansible/hosts #Запуск playbook который создаёт бэкап на тике и скачивает его
+ANSIBLE_CONFIG=/home/$USER/ansible/ansible.cfg ansible-playbook /home/$USER/ansible/playbooks/hostlist.yml    #Запуск playbook заполняющего hosts из нашего текстового файла со списком хостов и паролей
+ANSIBLE_CONFIG=/home/$USER/ansible/ansible.cfg ansible-playbook /home/$USER/ansible/playbooks/backup.yml    #Запуск playbook который создаёт бэкап на тике
