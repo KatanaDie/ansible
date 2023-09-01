@@ -42,10 +42,10 @@ cat <<EOF  > /home/$USER/ansible/playbooks/backup.yml
      gather_subset: all
   - name: create backup
     routeros_command:
-     commands: /system backup save name= "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }} SN {{ ansible_net_serialnum }}"
+     commands: /system backup save name= "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}"
   - name: backup-file download
     ansible.netcommon.net_get:
-        src: "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }} SN {{ ansible_net_serialnum }}.backup"
+        src: "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}.backup"
         dest: /home/$USER/mikrotik_backup/{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}.backup
         protocol: sftp
 EOF
