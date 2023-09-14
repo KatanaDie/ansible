@@ -12,7 +12,7 @@
 hostspath=$1
 mkdir /home/$USER/ansible
 mkdir /home/$USER/ansible/playbooks
-mkdir /home/$USER/mikrotik_backup
+mkdir /home/$USER/ansible/mikrotik_backup
 
 #Создание кастомного конфигурационного файла
 cat <<EOF > /home/$USER/ansible/ansible.cfg
