@@ -1,73 +1,48 @@
-# Что необходимо установить для работы:
-# Не забываем предварительно сделать update пакетов, в ubuntu это команда sudo apt-get update
-# Устанавливаем ansible, в ubuntu это команда sudo apt-get install ansible
-# Устанавливаем python3-pip, в ubuntu это команда sudo apt-get install python3-pip, после установки которого вводим команду pip install paramiko
-
-
-
-#Это bash скрипт, создаём в любой директории на которую есть права файл коммандой touch %scriptname%.sh и вписываем все строки ниже, всё работает без рут прав
-#Путь до списка с хостами и паролями сделан атрибутом! Указываем его в конце строки с командой запуска скрипта
-
 #Создание необходимых файлов и папок
 hostspath=$1
 mkdir /home/$USER/ansible
 mkdir /home/$USER/ansible/playbooks
 mkdir /home/$USER/ansible/mikrotik_backup
 
-#Создание кастомного конфигурационного файла 
-cat <<EOF > /home/$USER/ansible/ansible.cfg 
-[defaults] 
-inventory=/home/$USER/ansible/hosts 
-host_key_checking=false # Отключение первичной проверки ключей при ssh подключении. Иначе придётся сначала заходить своими руками 
-EOF 
- 
-#Заполнение инвентарного файла, прописываются необходимые модули и логин от микротиков 
-cat <<EOF > /home/$USER/ansible/hosts 
-[mikrotik] 
- 
-[mikrotik:vars] 
-ansible_python_interpreter=/usr/bin/python3 
-ansible_network_os=community.routeros.routeros 
-EOF 
- 
-#Запись в playbook кода создания и скачивания бэкапа на микротике 
-cat <<EOF  > /home/$USER/ansible/playbooks/backup.yml 
-- hosts: mikrotik 
-  connection: network_cli 
-  gather_facts: false 
-  tasks: 
-  - name: collect facts 
-    community.routeros.facts: 
-     gather_subset: all 
-  - name: create backup 
-    routeros_command: 
-     commands: /system backup save name= "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}" 
-  - name: backup-file download 
-    ansible.netcommon.net_get: 
-        src: "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}.backup" 
-        dest: /home/$USER/ansible/mikrotik_backup/{{inventory_hostname}} {{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}.backup 
-        protocol: sftp 
-  - name: backup-file delete 
-    routeros_command: 
-     commands: /file remove "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}.backup" 
-EOF 
- 
-#Запись в playbook кода для подгрузки логинов и паролей в инвентарный файл из нашего текстового файла с хостами? логинами, паролями и ssh портами через пробел 
-cat <<EOF > /home/$USER/ansible/playbooks/hostlist.yml 
-- name: host:pass 
-  hosts: localhost 
-  tasks: 
-    - name: read 
-      command: cat $hostspath 
-      register: hosts_and_passwords 
-    - name: write 
-      ini_file: 
-        path: /home/$USER/ansible/hosts 
-        section: mikrotik 
-        option: "{{ item.split()[0] }}" 
-        value: "ansible_host={{item.split()[1]}} ansible_user={{item.split()[2]}} ansible_password={{ item.split()[3] }} ansible_port={{ item.split() [4] | default('22') }}" 
-      loop: "{{ hosts_and_passwords.stdout_lines }}" 
-EOF 
- 
-ANSIBLE_CONFIG=/home/$USER/ansible/ansible.cfg ansible-playbook /home/$USER/ansible/playbooks/hostlist.yml    #Запуск playbook заполняющего hosts из нашего текстового файла со списком хостов и паролей 
+#Запись в playbook кода создания и скачивания бэкапа на микротике
+cat <<EOF  > /home/$USER/ansible/playbooks/backup.yml
+- hosts: mikrotik
+  connection: network_cli
+  gather_facts: false
+  tasks:
+  - name: collect facts
+    community.routeros.facts:
+     gather_subset: all
+    vars:
+     ansible_command_timeout: 180
+  - name: create backup
+    routeros_command:
+     commands: /system backup save name= "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}"
+  - name: backup-file download
+    ansible.netcommon.net_get:
+        src: "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}.backup"
+        dest: /home/$USER/ansible/{{inventory_hostname}}/{{inventory_hostname}} {{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}.backup
+        state: directory
+        protocol: sftp
+  - name: backup-file delete
+    routeros_command:
+     commands: /file remove "{{ansible_host}} {{ansible_net_version}} {{ lookup('pipe', 'date +%Y-%m-%d') }}.backup"
+EOF
+
+#Запись в playbook кода для подгрузки логинов и паролей в инвентарный файл из нашего текстового файла с хостами, паролями и ssh портами через пробел
+cat <<EOF > /home/$USER/ansible/playbooks/hostlist.yml
+- name: host:pass
+  hosts: localhost
+  tasks:
+    - name: read
+      command: cat $hostspath
+      register: hosts_and_passwords
+    - name: mk dir
+      file:
+        path: /home/$USER/ansible/mikrotik_backup/{{ item.split()[0] }}
+        state: directory
+      loop: "{{ hosts_and_passwords.stdout_lines }}"
+EOF
+
+ANSIBLE_CONFIG=/home/$USER/ansible/ansible.cfg ansible-playbook /home/$USER/ansible/playbooks/hostlist.yml    #Запуск playbook заполняющего hosts из нашего текстового файла со списком хостов и паролей
 ANSIBLE_CONFIG=/home/$USER/ansible/ansible.cfg ansible-playbook /home/$USER/ansible/playbooks/backup.yml    #Запуск playbook который создаёт бэкап на тике
